@@ -144,6 +144,13 @@ class GestorExcel:
         self._firmar_gestores(ws2)
         self.ws_gestores = ws2
 
+        # ⚠️ IMPORTANTE: para la versión web quitamos imágenes
+        # (logos) porque openpyxl + PIL fallan al guardar en memoria.
+        for wb in (self.wb_machote, self.wb_gestores):
+            for hoja in wb.worksheets:
+                if hasattr(hoja, "_images"):
+                    hoja._images = []
+
         self.row_m = self._find_next_row(self.ws_machote, 1, start=10)
         self.row_g = self._find_next_row(self.ws_gestores, 2, start=3)
 
@@ -255,18 +262,32 @@ st.markdown(
 )
 
 st.sidebar.title("⚙️ Configuración")
-gestor_nombre = st.sidebar.text_input("Nombre del Gestor", value=st.session_state.get("gestor", ""))
+gestor_nombre = st.sidebar.text_input(
+    "Nombre del Gestor",
+    value=st.session_state.get("gestor", "")
+)
+
+# Mensajito que pediste 👇
+st.sidebar.caption(
+    "📸 No olvides pedir tus fotos al **56 38 38 9671** para que cumplan con los requisitos."
+)
+
+# Crear / actualizar engine si cambia el gestor
 if gestor_nombre.strip():
-    st.session_state["gestor"] = gestor_nombre.strip().upper()
-
-st.sidebar.info("Completa los datos y presiona **Generar** para crear el expediente.")
-
-if "engine" not in st.session_state and gestor_nombre.strip():
-    st.session_state["engine"] = GestorExcel(gestor_nombre)
+    gestor_upper = gestor_nombre.strip().upper()
+    if (
+        "gestor" not in st.session_state
+        or "engine" not in st.session_state
+        or st.session_state["gestor"] != gestor_upper
+    ):
+        st.session_state["gestor"] = gestor_upper
+        st.session_state["engine"] = GestorExcel(gestor_upper)
 
 engine: Optional[GestorExcel] = st.session_state.get("engine")
 
-if not gestor_nombre.strip():
+st.sidebar.info("Completa los datos y presiona **Generar** para crear el expediente.")
+
+if not gestor_nombre.strip() or engine is None:
     st.warning("👉 Escribe primero el **Nombre del Gestor** en la barra lateral.")
     st.stop()
 
@@ -349,7 +370,7 @@ for i, (key, (nombre_archivo, label)) in enumerate(conf_docs.items()):
         uploaded_info[key] = (entregado, archivo)
 
 if fotos_completas:
-    st.caption("📸 Tip: Si no entregó fotos completas, desmarca la opción y súbelas por separado.")
+    st.caption("📸 Si no entregó fotos completas, desmarca la opción y súbelas por separado.")
 
 st.markdown("---")
 st.header("4️⃣ Generar expediente y formatos")
@@ -357,11 +378,9 @@ st.header("4️⃣ Generar expediente y formatos")
 generar = st.button("🚀 GENERAR ARCHIVOS DEL ALUMNO", type="primary")
 
 if generar:
-    # Validaciones mínimas
     if not curp or not nombre or not p_ap:
         st.error("La CURP, Nombre y Primer Apellido son obligatorios.")
     else:
-        # Crear objeto Alumno
         alumno = Alumno(
             carrera=carrera,
             curp=curp,
@@ -376,18 +395,15 @@ if generar:
             solicita_autenticacion=solicita_auth,
         )
 
-        # Carpeta del alumno
         carpeta_alumno = BASE_ALUMNOS_DIR / f"{alumno.curp}_{alumno.nombre_completo.replace(' ', '_')}"
         carpeta_alumno.mkdir(exist_ok=True)
 
-        # Guardar archivos subidos temporalmente y convertir a Documento
         pdfs_alumno: List[Path] = []
         for key, (nombre_archivo, _) in conf_docs.items():
             entregado, archivo = uploaded_info[key]
             ruta_tmp = None
 
             if archivo is not None:
-                # Guardar archivo subido en disco
                 ext = Path(archivo.name).suffix.lower()
                 ruta_tmp = carpeta_alumno / f"{alumno.curp}_{nombre_archivo}{ext}"
                 ruta_tmp.write_bytes(archivo.read())
@@ -404,7 +420,6 @@ if generar:
             if pdf_path and pdf_path not in pdfs_alumno:
                 pdfs_alumno.append(pdf_path)
 
-        # Generar PDF completo del alumno
         expediente_pdf_path = None
         if pdfs_alumno:
             expediente_pdf_path = carpeta_alumno / f"{alumno.curp}_EXPEDIENTE_COMPLETO.pdf"
@@ -420,7 +435,6 @@ if generar:
 
         st.success("✅ Alumno procesado correctamente.")
 
-        # Zona de descargas
         st.subheader("⬇️ Descargas")
 
         if expediente_pdf_path and expediente_pdf_path.exists():
@@ -446,7 +460,7 @@ if generar:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
-        st.info("Puedes cambiar los datos y volver a presionar el botón para capturar otro alumno dentro de la misma sesión.")
+        st.info("Para capturar otro alumno, cambia los datos de arriba y vuelve a presionar **GENERAR ARCHIVOS DEL ALUMNO**.")
 
 st.markdown("---")
-st.caption("Desarrollado por **AI Softwares® – Arquitectos de Ideas**")
+st.caption("Desarrollado por **AI Softwares® – Arquitectos de Ideas - ad altiora tendimus **")
